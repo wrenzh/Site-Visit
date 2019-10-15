@@ -250,8 +250,6 @@ def generateList(srcDir, dstDir, verbose):
     # Determine if a file belong to paper or poster and record in dictionary
     posters = []
     papers = []
-    # Used to separate revision number
-    pattern = re.compile(r"(\w+)_R(\d+)")
     for f in allFiles:
         base = os.path.basename(f)
         path = os.path.dirname(f)
@@ -268,39 +266,38 @@ def generateList(srcDir, dstDir, verbose):
             isPoster = True
         elif ext.lower() == ".pdf":
             # Determine by other files in the same folder
-            # If there is any other file with .doc/.docx, the file is paper
-            # Otherwise, the file is poster
+            # If other file with .doc/.docx, the file is paper
+            # If other file with .ppt/.pptx, the file is a poster
             if not (isPoster or isPaper):
                 files = os.listdir(path)
-                paperHere = False
-                for f in files:
-                    if ".doc" in f.lower() or ".docx" in f.lower():
-                        paperHere = True
-                        break
-                isPaper = paperHere
-                isPoster = not paperHere
+                for a in files:
+                    if ".doc" in a.lower() or ".docx" in a.lower():
+                        isPaper = True
+                    elif ".ppt" in a.lower() or ".pptx" in a.lower():
+                        isPoster = True
         else:
-            raise ValueError(f"Unsupported file format {ext} in {base}")
+            raise ValueError(f"Unsupported file format {ext} in {path}")
 
         if isPoster and isPaper:
             raise ValueError(f"Confused {f} for paper or poster?")
 
         category, area = categorize(path)
-        properName = '_'.join(decode(name))
-        results = pattern.search(properName)
+        (last, first, univ, prof, indx, revs) = decode(name)
+        properName = '_'.join([last, first, univ, prof, indx, revs])
+        baseName = '_'.join([last, first, univ, prof, indx])
         if isPoster:
             posters.append({"Path": f,
                             "Name": properName,
-                            "BaseName": results.group(1),
-                            "Revision": int(results.group(2)),
+                            "BaseName": baseName,
+                            "Revision": int(revs[1:]),
                             "Extension": ext,
                             "Category": category,
                             "Area": area})
         else:
             papers.append({"Path": f,
                            "Name": properName,
-                           "BaseName": results.group(1),
-                           "Revision": int(results.group(2)),
+                           "BaseName": baseName,
+                           "Revision": int(revs[1:]),
                            "Extension": ext,
                            "Area": area})
 
@@ -364,6 +361,10 @@ def copyFormated(papers, posters, dstDir, verbose=True):
         dstSubdir = os.path.join(dstDir, "Papers", p["Area"])
         dstFile = os.path.join(dstSubdir, p["BaseName"] + p["Extension"])
         os.makedirs(dstSubdir, exist_ok=True)
+        if os.path.isfile(dstFile):
+            # File already exists, likely duplicates
+            raise ValueError(f"File already exists: {dstFile}")
+
         shutil.copy2(p["Path"], dstFile)
 
         if verbose:
@@ -452,7 +453,7 @@ def main(rootDir, newDir, baseLink, QRLocation, verbose):
     writeList2CSV(papers, posters, newDir)
 
     if verbose:
-        print("Copying to formatted forlder structure")
+        print("Copying to formatted forlder structure...")
 
     copyFormated(papers, posters, newDir, verbose)
 
@@ -479,12 +480,12 @@ if __name__ == "__main__":
         root = sys.argv[1]
 
     timenow = datetime.datetime.now().strftime("%b %d %y %H%M%S")
-    newDir = os.path.abspath(os.path.join(root, os.pardir, 
-                                          "Generated " + timenow))
+    newDir = os.path.join(root, os.pardir, "Generated " + timenow)
+    newDir = os.path.abspath(newDir)
 
     # Base link where file should point to
     baseLink = "https://curent.utk.edu/" + year + "SiteVisit"
     # Location for placing the QR code on the poster
     QRLocation = [1400, 2415, 1540, 2555]
 
-    main(root, newDir, baseLink, QRLocation, True)
+    main(root, newDir, baseLink, QRLocation, verbose=True)

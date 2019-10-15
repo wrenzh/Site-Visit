@@ -9,13 +9,11 @@ license = "MIT"
 python = "^3.7"
 comtypes = "^1.1"
 qrcode = "^6.1"
-PyPDF2 = "^1.26"
 pymupdf = "^1.16"
 Pillow = "^6.2"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.4"
-mypy = "^0.730.0"
 pyinstaller = "^3.5"
 pywin32-ctypes = "^0.2.0"
 pefile = "^2019.4"
