@@ -1,7 +1,7 @@
 # Manage paper and poster submission for CURENT ERC Annual Site Visit
 # Author: Wen Zhang (wzhang53@utk.edu)
-# Version: 0.1.0
-# Date: 10/11/2019
+# Version: 0.2.0
+# Date: 10/17/2019
 # License: MIT
 #
 # Functionalities:
@@ -106,22 +106,22 @@ def decode(filename):
 
     last, first, univ, prof = fields[0], fields[1], fields[2], fields[3]
     indx = "1" if len(fields) < 5 else fields[4]
-    revs = "R0" if len(fields) < 6 else fields[5].upper()
+    revs = "R0" if len(fields) < 6 else fields[5]
 
-    return (last, first, univ, prof, indx, revs)
+    return last, first, univ, prof, indx, revs
 
 
 def categorize(filepath):
     """Find the poster/paper category and area"""
-    # Category (only for posters)
-    c = re.compile("Core|Non-core|Associated")
-    # Research area (for both posters and papers)
-    a = re.compile(r"Hardware\sTestbed|HVDC\sand\sFACTS|Large\sScale\sTestbed|"
-                   r"Other\sCategories|Power\sConverter\sDesign\sand\sControl|"
+    c = re.compile("Core|Non-core|Associated", flags=re.IGNORECASE)
+    a = re.compile(r"Hardware\sTestbed|Actuation\sand\sHVDC|"
+                   r"Large\sScale\sTestbed|Other\sCategories|"
+                   r"Power\sConverter\sDesign\sand\sControl|"
                    r"Power\sElectronics\sDevices\sand\sComponents|"
                    r"Power\sSystem\sControl|Power\sSystem\sEstimation|"
                    r"Power\sSystem\sModeling|Power\sSystem\sMonitoring",
                    flags=re.IGNORECASE)
+
     if c.search(filepath):
         category = c.search(filepath).group(0)
     else:
@@ -130,6 +130,7 @@ def categorize(filepath):
     if a.search(filepath):
         area = a.search(filepath).group(0)
     else:
+        # Every poster/paper must have an research area
         raise ValueError(f"Filepath {filepath} does not contain research area")
 
     return category, area
@@ -147,53 +148,40 @@ def batch2pdf(srcDir, verbose):
             allFiles.append(os.path.join(root, f))
 
     for f in allFiles:
-        base = os.path.basename(f)
         path = os.path.dirname(f)
-        name, ext = os.path.splitext(base)
+        name, ext = os.path.splitext(os.path.basename(f))
 
         if ext.lower() == ".pdf":
             pass
-        elif ext.lower() == ".ppt" or ext.lower() == ".pptx":
-            if verbose:
-                print(f"Converting {f} to pdf...")
-
-            try:
-                deck = powerpoint.Presentations.Open(f)
-                # Powerpoint formatType code 32 for pdf
-                deck.SaveAs(os.path.join(path, name + ".pdf"), 32)
-                deck.Close()
-            except comtypes.COMError:
-                print(f"ERROR: Converting {f} failed")
-                print("Please check if the file has Visio drawings")
-                print("Also check PDF export settings (PDF/A must be off)")
-                quit()
-
-            if verbose:
-                print(f"Conversion success, removing {f}")
-
-            os.remove(f)
-        elif ext.lower() == ".doc" or ext.lower() == ".docx":
-            if verbose:
-                print(f"Converting {f} to pdf...")
-
-            try:
-                doc = word.Documents.open(os.path.join(srcDir, f))
-                # Word formatType code 17 for pdf
-                doc.SaveAs(os.path.join(path, name + ".pdf"), 17)
-                doc.Close()
-            except comtypes.COMError:
-                print(f"ERROR: Converting {f} failed")
-                print("Please check if the file has Visio drawings")
-                print("Also check PDF export settings (PDF/A must be off)")
-                quit()
-
-            if verbose:
-                print(f"Conversion success, removing {f}")
-
-            os.remove(f)
         elif ext.lower() == ".csv":
-            # Likely the list of papers and posters
+            # Likely the list of papers and posters so don't do anything
             pass
+        elif ext.lower() == ".ppt" or ext.lower() == ".pptx" or \
+             ext.lower() == ".doc" or ext.lower() == ".docx":
+            if verbose:
+                print(f"Converting {f} to pdf...")
+
+            try:
+                if ext.lower() == ".ppt" or ext.lower() == ".pptx":
+                    deck = powerpoint.Presentations.Open(f)
+                    # Powerpoint formatType code 32 for pdf
+                    deck.SaveAs(os.path.join(path, name + ".pdf"), 32)
+                    deck.Close()
+                else:
+                    doc = word.Documents.open(os.path.join(srcDir, f))
+                    # Word formatType code 17 for pdf
+                    doc.SaveAs(os.path.join(path, name + ".pdf"), 17)
+                    doc.Close()
+            except comtypes.COMError:
+                print(f"ERROR: Converting {f} failed")
+                print("Please check if the file has Visio drawings")
+                print("Also check PDF export settings (PDF/A must be off)")
+                quit()
+
+            if verbose:
+                print(f"Conversion success, removing {f}")
+
+            os.remove(f)
         else:
             raise ValueError(f"Unexpected filetype .{ext} in {path}")
 
@@ -203,13 +191,11 @@ def batch2pdf(srcDir, verbose):
 
 def insertQRCode(srcPDF, dstPDF, link, location):
     """Insert the QR code to link on pdfFile"""
-    img = qrcode.make(link)
     buf = io.BytesIO()
-    img.save(buf)
-    img_stream = buf.getvalue()
+    qrcode.make(link).save(buf)
 
     pdfFile = fitz.open(srcPDF)
-    pdfFile[0].insertImage(fitz.Rect(*location), stream=img_stream)
+    pdfFile[0].insertImage(fitz.Rect(*location), stream=buf.getvalue())
     pdfFile.save(dstPDF)
     pdfFile.close()
 
@@ -235,7 +221,7 @@ def batchQRCode(srcDir, baseLink, location, verbose):
         insertQRCode(f, tmp, link, location)
 
         if verbose:
-            print(f"Success, replacing original file")
+            print("Success, replacing original file")
 
         os.replace(tmp, f)
 
@@ -247,7 +233,7 @@ def generateList(srcDir, dstDir, verbose):
         for f in files:
             allFiles.append(os.path.join(root, f))
 
-    # Determine if a file belong to paper or poster and record in dictionary
+    # Determine if a file is paper or poster and record in dictionary
     posters = []
     papers = []
     for f in allFiles:
@@ -255,136 +241,119 @@ def generateList(srcDir, dstDir, verbose):
         path = os.path.dirname(f)
         name, ext = os.path.splitext(base)
 
-        isPoster = "Poster" in path
-        isPaper = "Paper" in path
+        isPoster = "Poster" in path or \
+                   ext.lower() == ".ppt" or \
+                   ext.lower() == ".pptx"
+        isPaper = "Paper" in path or \
+                  ext.lower() == ".doc" or \
+                  ext.lower() == ".docx"
 
-        if ext.lower() == ".doc" or ext.lower() == ".docx":
-            # .doc/.docx is definitely a paper
-            isPaper = True
-        elif ext.lower() == ".ppt" or ext.lower() == ".pptx":
-            # .ppt/.pptx is definitely a poster
-            isPoster = True
-        elif ext.lower() == ".pdf":
+        if (not (isPoster or isPaper)) and ext.lower() == ".pdf":
             # Determine by other files in the same folder
-            # If other file with .doc/.docx, the file is paper
-            # If other file with .ppt/.pptx, the file is a poster
-            if not (isPoster or isPaper):
-                files = os.listdir(path)
-                for a in files:
-                    if ".doc" in a.lower() or ".docx" in a.lower():
-                        isPaper = True
-                    elif ".ppt" in a.lower() or ".pptx" in a.lower():
-                        isPoster = True
-        else:
-            raise ValueError(f"Unsupported file format {ext} in {path}")
+            for a in os.listdir(path):
+                isPaper |= ".doc" in a.lower()
+                isPoster |= ".ppt" in a.lower()
 
-        if isPoster and isPaper:
-            raise ValueError(f"Confused {f} for paper or poster?")
+        if (isPoster and isPaper) and (not (isPoster or isPaper)):
+            raise ValueError(f"Cannot determine {f}: paper or poster?")
 
         category, area = categorize(path)
-        (last, first, univ, prof, indx, revs) = decode(name)
-        properName = '_'.join([last, first, univ, prof, indx, revs])
-        baseName = '_'.join([last, first, univ, prof, indx])
+        last, first, univ, prof, indx, revs = decode(name)
+        fname = '_'.join([last, first, univ, prof, indx, revs])
+        bname = '_'.join([last, first, univ, prof, indx])
+        revs = int(revs[1:])
+        mtime = os.path.getmtime(f)
+        d = {"file": f, "name": fname, "base": bname, "revs": revs, 
+             "ext": ext, "category": category, "area": area, "mtime": mtime}
+
         if isPoster:
-            posters.append({"Path": f,
-                            "Name": properName,
-                            "BaseName": baseName,
-                            "Revision": int(revs[1:]),
-                            "Extension": ext,
-                            "Category": category,
-                            "Area": area})
+            posters.append(d)
         else:
-            papers.append({"Path": f,
-                           "Name": properName,
-                           "BaseName": baseName,
-                           "Revision": int(revs[1:]),
-                           "Extension": ext,
-                           "Area": area})
+            papers.append(d)
 
     return papers, posters
 
 
 def removeOldRevisions(fileList, verbose):
     """Find and delete older revisions"""
-    baseNames = [p["BaseName"] for p in fileList]
-    revisions = [p["Revision"] for p in fileList]
+    baseNames = [f["base"] for f in fileList]
+    revisions = [f["revs"] for f in fileList]
 
     # Sorted indices with baseNames to aggeregate same paper/poster
-    sortedIndx = sorted(range(len(baseNames)), key=baseNames.__getitem__)
-    sortedNames = [baseNames[i] for i in sortedIndx]
-    sortedRevs = [revisions[i] for i in sortedIndx]
+    sIndx = sorted(range(len(baseNames)), key=baseNames.__getitem__)
+    sNames = [baseNames[i] for i in sIndx]
+    sRevs = [revisions[i] for i in sIndx]
 
     prevName = ''
-    prevRev = -1
-    indicesToDelete = []
-    for i, n in enumerate(sortedNames):
+    lastRev = -1
+    indxToDel = []
+    for i, n in enumerate(sNames):
         if n != prevName:
             prevName = n
-            prevRev = sortedRevs[i]
-        elif sortedRevs[i] > prevRev:
+            lastRev = sRevs[i]
+        elif sRevs[i] > lastRev:
             if verbose:
-                print(f"Removing version {prevRev} < latest "
-                        f"{sortedRevs[i]} for {n}")
+                print(f"Remove ver. {lastRev} < latest {sRevs[i]} for {n}")
 
-            indicesToDelete.append(sortedIndx[i-1])
-            prevRev = sortedRevs[i]
-        elif sortedRevs[i] < prevRev:
+            indxToDel.append(sIndx[i-1])
+            lastRev = sRevs[i]
+        elif sRevs[i] < lastRev:
             if verbose:
-                print(f"Removing version {sortedRevs[i]} < latest "
-                      f"{prevRev} for {n}")
+                print(f"Remove ver. {sRevs[i]} < latest {lastRev} for {n}")
 
-            indicesToDelete.append(sortedIndx[i])
+            indxToDel.append(sIndx[i])
 
-    return [fileList[i] for i in set(sortedIndx) - set(indicesToDelete)]
+    return [fileList[i] for i in set(sIndx) - set(indxToDel)]
 
 
 def findDuplicate(fileList):
     """Find duplicate submissions in fileList"""
     duplicate = False
 
-    uniqNames = []
+    uniqs = []
     for f in fileList:
-        if f["Name"] not in uniqNames:
-            uniqNames.append(f["Name"])
+        if f["name"] not in uniqs:
+            uniqs.append(f["name"])
         else:
             duplicate = True
-            print(f"Duplicate found: {f['Path']}")
+            print(f"Duplicate found: {f['file']}")
 
     if duplicate:
-        raise ValueError("Duplicate submission file found.")
+        raise ValueError("Duplicate submission file found")
 
 
 def copyFormated(papers, posters, dstDir, verbose=True):
     """Copy files in papers and posters to dstDir as structured"""
     # Copy files to dstDir
     for p in papers:
-        dstSubdir = os.path.join(dstDir, "Papers", p["Area"])
-        dstFile = os.path.join(dstSubdir, p["BaseName"] + p["Extension"])
+        # No need to differentiate categories for papers
+        dstSubdir = os.path.join(dstDir, "Papers", p["area"])
         os.makedirs(dstSubdir, exist_ok=True)
+        # Revision numbers are removed
+        dstFile = os.path.join(dstSubdir, p["base"] + p["ext"])
         if os.path.isfile(dstFile):
-            # File already exists, likely duplicates
+            # File already exists, likely duplicates or older submission
             raise ValueError(f"File already exists: {dstFile}")
 
-        shutil.copy2(p["Path"], dstFile)
+        shutil.copy2(p["file"], dstFile)
 
         if verbose:
-            path = p["Path"]
-            print(f"Paper {path} copied to {dstFile}")
+            print(f"Paper {p['file']} copied to {dstFile}")
 
     for p in posters:
-        dstSubdir = os.path.join(dstDir, "Posters", p["Category"], p["Area"])
-        dstFile = os.path.join(dstSubdir, p["BaseName"] + p["Extension"])
+        # Categories for posters
+        dstSubdir = os.path.join(dstDir, "Posters", p["category"], p["area"])
         os.makedirs(dstSubdir, exist_ok=True)
+        # Revision numbers are removed
+        dstFile = os.path.join(dstSubdir, p["base"] + p["ext"])
         if os.path.isfile(dstFile):
-            # File already exists, likely duplicates
+            # File already exists, likely duplicates or older submission
             raise ValueError(f"File already exists: {dstFile}")
 
-        shutil.copy2(p["Path"], dstFile)
+        shutil.copy2(p["file"], dstFile)
 
         if verbose:
-            path = p["Path"]
-            print(f"Poster {path} copied to {dstFile}")
-
+            print(f"Poster {p['file']} copied to {dstFile}")
 
 
 def writeList2CSV(papers, posters, dstDir):
@@ -396,25 +365,20 @@ def writeList2CSV(papers, posters, dstDir):
         print("Cannot write .csv files. Are they open in Excel?")
 
     # Print table headers
-    print("File name, Area, Last name, First name, "
-          "University, Professor, Index, Revision", file=paperFile)
-    print("File name, Category, Area, Last name, First name, "
-          "University, Professor, Index, Revision", file=posterFile)
+    print("File name, Area, Last name, First name, University, "
+          "Professor, Index, Revision, Last Modified", file=paperFile)
+    print("File name, Category, Area, Last name, First name, University, "
+          "Professor, Index, Revision, Last Modified", file=posterFile)
 
     for p in papers:
-        name = p["Name"]
-        area = p["Area"]
-        last, first, univ, prof, indx, revs = decode(name)
-        print(f"{name}, {area}, {last}, {first}, "
-              f"{univ}, {prof}, {indx}, {revs}", file=paperFile)
+        last, first, univ, prof, indx, _ = decode(p["name"])
+        print(f"{p['name']}, {p['area']}, {last}, {first}, {univ}, "
+              f"{prof}, {indx}, {p['revs']}, {p['mtime']}", file=paperFile)
 
     for p in posters:
-        name = p["Name"]
-        category = p["Category"]
-        area = p["Area"]
-        last, first, univ, prof, indx, revs = decode(name)
-        print(f"{name}, {category}, {area}, {last}, {first}, "
-              f"{univ}, {prof}, {indx}, {revs}", file=posterFile)
+        last, first, univ, prof, indx, _ = decode(p["name"])
+        print(f"{p['name']}, {p['category']}, {p['area']}, {last}, {first}, "
+              f"{univ}, {prof}, {indx}, {p['revs']}, {p['mtime']}", file=posterFile)
 
     paperFile.close()
     posterFile.close()
@@ -474,8 +438,8 @@ def main(rootDir, newDir, baseLink, QRLocation, verbose):
 if __name__ == "__main__":
     year = datetime.datetime.now().strftime("%Y")
     if len(sys.argv) < 2:
-        root = os.path.join(os.path.expanduser('~'), 
-                            "Downloads", year + " Annual Site Visit")
+        root = os.path.join(os.path.expanduser('~'), "Downloads", 
+                            year + " Annual Site Visit")
     else:
         root = sys.argv[1]
 
