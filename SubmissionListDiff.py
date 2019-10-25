@@ -1,7 +1,7 @@
 # Compare two list of posters or papers 
 # Author: Wen Zhang (wzhang53@utk.edu)
-# Version: 0.2.0
-# Date: 10/17/2019
+# Version: 0.3.0
+# Date: 10/25/2019
 # License: MIT
 
 import os
@@ -9,7 +9,7 @@ import sys
 import csv
 import re
 
-def listDiff(A, B):
+def diff(A, B):
     """Compare two list of files and find changes"""
     # A is the reference, and B is supposedly the newer version
     a = list(csv.DictReader(open(A, 'r'), skipinitialspace=True))
@@ -51,40 +51,46 @@ def listDiff(A, B):
             delSubs.append(n)
 
     # Report changes
-    print(f"Total new submissions in {B}: {len(newSubs)}")
+    print(f"Comparing {os.path.basename(B)} against {os.path.basename(A)}\n")
+    print(f"Total new submissions: {len(newSubs)}")
     for n in newSubs:
         print(f"+ {n}")
 
-    print(f"\nDeleted submissions in {A}: {len(delSubs)}")
+    print(f"\nDeleted submissions: {len(delSubs)}")
     for n in delSubs:
         print(f"- {n}")
 
-    print(f"\nContent modified in {B}: {len(contentModifies)}")
+    print(f"\nContent modified: {len(contentModifies)}")
     for n in contentModifies:
         print(f"@ {n}")
 
-    print(f"\nCategory change in {B}: {len(categoryChanges)}")
+    print(f"\nCategory change: {len(categoryChanges)}")
     for n in categoryChanges:
         print(f"# {n}")
 
 
-
 if __name__ == "__main__":
-    if len(sys.argv) > 3:
-        raise ValueError("Too many input arguments")
-    elif len(sys.argv) == 3:
-        listDiff(sys.argv[1], sys.argv[2])
-    elif len(sys.argv) <= 2:
-        folder = os.path.join(os.path.expanduser('~'), 'Downloads') \
-                 if (len(sys.argv) == 1) else sys.argv[1]
+    if len(sys.argv) == 3 and \
+       os.path.isfile(sys.argv[1]) and \
+       os.path.isfile(sys.argv[2]):
+        diff(sys.argv[1], sys.argv[2])
+        quit()
+    elif len(sys.argv) == 2 and os.path.isdir(sys.argv[1]):
+        folder = sys.argv[1]
+    elif len(sys.argv) == 1:
+        folder = os.path.join(os.path.expanduser('~'), "Downloads")
+    else:
+        raise ValueError("Usage:\n"
+                         "SubmissionListDiff *dir*\n or\n"
+                         "SubmissionListDiff *fileA* *fileB*")
 
-        csvFiles = []
-        for f in os.listdir(folder):
-            _, ext = os.path.splitext(f)
-            if ext.lower() == ".csv":
-                csvFiles.append(os.path.join(folder, f))
+    csvFiles = []
+    for f in os.listdir(folder):
+        _, ext = os.path.splitext(f)
+        if ext.lower() == ".csv":
+            csvFiles.append(os.path.join(folder, f))
 
-        if len(csvFiles) != 2:
-            raise ValueError("Exactly 2 csv files required")
+    if len(csvFiles) != 2:
+        raise ValueError(f"Expected 2 csv files, found {len(csvFiles)}")
 
-        listDiff(csvFiles[0], csvFiles[1])
+    diff(csvFiles[0], csvFiles[1])
