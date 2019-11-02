@@ -15,7 +15,7 @@ def diff(A, B):
     a = list(csv.DictReader(open(A, 'r'), skipinitialspace=True))
     b = list(csv.DictReader(open(B, 'r'), skipinitialspace=True))
 
-    # Get name keys
+    # Get list of base names
     getName = re.compile(r"(.*)_R\d+")
     namesA = [getName.match(f["File name"]).group(1) for f in a]
     namesB = [getName.match(f["File name"]).group(1) for f in b]

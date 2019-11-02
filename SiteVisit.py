@@ -145,6 +145,7 @@ def scan(srcDir):
         # Base name without revision number
         bname = '_'.join([last, first, univ, prof, indx])
         revs = int(revs[1:])
+        # Modified time
         mtime = os.path.getmtime(f)
         d = {"file": f, "fname": fname, "bname": bname, "revs": revs,
              "last": last, "first": first, "univ": univ, "prof": prof,
@@ -246,7 +247,7 @@ def getPosterTitle(pdfFile, rect=[0, 0, 1728, 290]):
 
 def saveList(papers, posters, dstDir):
     """Write list of papers and posters to csv files in dstDir"""
-    paperFile= os.path.join(dstDir, "Papers.csv")
+    paperFile = os.path.join(dstDir, "Papers.csv")
     with open(paperFile, "w", encoding="utf-8") as f:
         f.write("File name, Area, Last name, First name, University, "
                 "Professor, Index, Revision, Last Modified, Title, Abstract\n")
@@ -267,24 +268,26 @@ def saveList(papers, posters, dstDir):
                     f"{title}, "
                     f"{abstract}\n")
 
-    posterFile = os.path.join(dstDir, "Poster.csv")
+    posterFile = os.path.join(dstDir, "Posters.csv")
     with open(posterFile, "w", encoding="utf-8") as f:
         f.write("File name, Category, Area, Last name, First name, "
                 "University, Professor, Index, Revision, "
                 "Last Modified, Title\n")
 
         for p in posters:
+            title = ""
             try:
                 pdfFile = os.path.abspath(os.path.join(dstDir, 
                                                        "Posters", 
                                                        p["category"], 
                                                        p["area"], 
-                                                       p["base"] + ".pdf"))
+                                                       p["bname"] + ".pdf"))
                 title = getPosterTitle(pdfFile)
             except:
                 title = " "
 
             f.write(f"{p['fname']}, "
+                    f"{p['category']}, "
                     f"{p['area']}, "
                     f"{p['last']}, "
                     f"{p['first']}, "
